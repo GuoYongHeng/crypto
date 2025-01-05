@@ -1,0 +1,14 @@
+{
+    "test1": {
+        "class_name": "SimpleStrategy",
+        "vt_symbol": "btcusdt.BINANCE",
+        "setting": {
+            "atr_length": 22,
+            "atr_ma_length": 10,
+            "rsi_length": 5,
+            "rsi_entry": 16,
+            "trailing_percent": 0.8,
+            "fixed_size": 1
+        }
+    }
+}
