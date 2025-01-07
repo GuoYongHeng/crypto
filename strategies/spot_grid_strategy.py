@@ -23,6 +23,7 @@ class SpotGridStrategy(CtaTemplate):
     author = "gyh"
     trading_size = 0.5
     max_size = 100.0
+    grid_step = 2
 
     parameters = ["grid_step", "trading_size", "max_size"]
 
@@ -97,6 +98,7 @@ class SpotGridStrategy(CtaTemplate):
             elif len(self.buy_orders) == 0 or len(self.sell_orders) == 0:
                 # 网格两边的数量不对等.
                 self.cancel_all()
+
 
     def process_account_event(self, event:Event):
         print("收到的账户资金的信息:", event.data)
