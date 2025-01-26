@@ -4,6 +4,7 @@ from vnpy_ctastrategy import (
     TickData,
     TradeData, 
     OrderData,
+    StopOrder,
     ArrayManager, 
     BarGenerator
 )
@@ -15,54 +16,45 @@ class SmaStrategy(CtaTemplate):
     """Double SMA (simple moving average) strategy"""
     author: str = "GYH"
 
-    fast_window: int = 5
+    fast_window: int = 10
     slow_window: int = 20
-    trading_symbol: str = ""
-    trading_size: int = 1
 
-    fast_ma: int = 0
-    slow_ma: int = 0
-    trading_target: int = 0
-    trading_pos: int = 0
+    fast_ma0: float = 0.0
+    fast_ma1: float = 0.0
+
+    slow_ma0: float = 0.0
+    slow_ma1: float = 0.0
 
     parameters: list = [
         "fast_window",
         "slow_window",
-        "trading_symbol",
-        "trading_size"
     ]
 
     variables: list = [
-        "fast_ma",
-        "slow_ma",
-        "trading_target",
-        "trading_pos"
+        "fast_ma0",
+        "slow_ma0",
+        "fast_ma1",
+        "slow_ma1",
     ]
 
+    def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
+        super().__init__(cta_engine, strategy_name, vt_symbol, setting)
+
+        self.bg = BarGenerator(self.on_bar)
+        self.am = ArrayManager()
+
+
     def on_init(self) -> None:
-        self.trading_symbol: str = self.vt_symbol
-        self.bar_dt: datetime = None
-
-        self.bg: BarGenerator = BarGenerator(
-            on_bar=self.on_bar,
-            window=1,
-            on_window_bar=self.on_window_bar,
-            interval=Interval.MINUTE
-        )
-
-        self.am: ArrayManager = ArrayManager()
-
-        self.load_bar(10, Interval.MINUTE)
-        
-        self.write_log("Strategy is inited.")
+        self.write_log("策略初始化")
+        self.load_bar(10)
 
 
     def on_start(self) -> None:
-        self.write_log("Strategy is started")
+        self.write_log("策略启动")
 
 
     def on_stop(self) -> None:
-        self.write_log("Strategy is stopped")
+        self.write_log("策略停止")
 
 
     def on_tick(self, tick: TickData) -> None:
@@ -70,33 +62,42 @@ class SmaStrategy(CtaTemplate):
 
 
     def on_bar(self, bar: BarData) -> None:
-        self.bg.update_bar(bar)
-
-
-    def on_window_bar(self, bar: BarData) -> None:
-        self.am.update_bar(bar)
-        if not self.am.inited:
+        am = self.am
+        am.update_bar(bar)
+        if not am.inited:
             return
 
-        self.fast_ma = self.am.sma(self.fast_window)
-        self.slow_ma = self.am.sma(self.slow_window)
+        fast_ma = am.sma(self.fast_window, array=True)
+        self.fast_ma0 = fast_ma[-1]
+        self.fast_ma1 = fast_ma[-2]
 
-        if self.fast_ma > self.slow_ma:
-            self.trading_target = self.trading_size # 多开
-        else:
-            self.trading_target = -self.trading_size # 空开
+        slow_ma = am.sma(self.slow_window, array=True)
+        self.slow_ma0 = slow_ma[-1]
+        self.slow_ma1 = slow_ma[-2]
 
-        trading_volume: int = self.trading_target - self.trading_pos
+        cross_over = self.fast_ma0 > self.slow_ma0 and self.fast_ma1 < self.slow_ma1
+        cross_below = self.fast_ma0 < self.slow_ma0 and self.fast_ma1 > self.slow_ma1
 
-        if trading_volume > 0:
-            self.buy(self.trading_symbol, bar.close_price * 1.01, abs(trading_volume))
-        else:
-            self.short(self.trading_symbol, bar.close_price * 0.99, abs(trading_volume))
+        if cross_over:
+            if self.pos == 0:
+                self.buy(bar.close_price, 1)
+            elif self.pos < 0:
+                self.cover(bar.close_price, 1)
+                self.buy(bar.close_price, 1)
+        elif cross_below:
+            if self.pos == 0:
+                self.short(bar.close_price, 1)
+            elif self.pos > 0:
+                self.sell(bar.close_price, 1)
+                self.short(bar.close_price, 1)
 
+    def on_order(self, order: OrderData) -> None:
+        pass
 
     def on_trade(self, trade: TradeData) -> None:
         pass
 
-
-    def on_order(self, order: OrderData) -> None:
+    def on_stop_order(self, stop_order: StopOrder):
         pass
+
+# reference:https://github.com/51bitquant/howtrader/blob/91072127078f1730a9c97cb040eb29634b2fa07f/examples/strategies/double_ma_strategy.py
