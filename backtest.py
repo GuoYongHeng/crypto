@@ -21,4 +21,6 @@ if __name__ == "__main__":
     )
 
     engine.add_strategy(FixedTradeTimeStrategy, {})
+    engine.load_data()
+    engine.run_backtesting()
     fig:go.Figure = engine.show_chart()
