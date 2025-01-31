@@ -4,6 +4,7 @@ from datetime import datetime
 from vnpy.trader.database import get_database, BaseDatabase
 from vnpy.trader.object import BarData
 from vnpy.trader.constant import Exchange,Interval
+from time import sleep
 
 def date_to_timestamp(date_str):
     # 将日期字符串转为datetime对象
@@ -28,13 +29,13 @@ def main():
     proxy = "http://127.0.0.1:7890"
     exchange.httpsProxy = proxy
 
-    start_date = '2024-04-01'
-    end_date = '2024-08-01'
+    start_date = '2024-01-01'
+    end_date = '2024-04-01'
 
     start_ts = date_to_timestamp(start_date)
     end_ts = date_to_timestamp(end_date)
     current_ts = start_ts
-    symbol = "BTC/USDT"
+    symbol = "BTCUSDT"
     timeframe = "1m"
 
     db:BaseDatabase = get_database()
@@ -64,6 +65,7 @@ def main():
         db.save_bar_data(buf)
         current_ts = klines[-1][0]
         print(generate_datetime(current_ts))
+        sleep(0.001)
 
 
 

@@ -16,8 +16,8 @@ class SmaStrategy(CtaTemplate):
     """Double SMA (simple moving average) strategy"""
     author: str = "GYH"
 
-    fast_window: int = 10
-    slow_window: int = 20
+    fast_window: int = 15
+    slow_window: int = 28
 
     fast_ma0: float = 0.0
     fast_ma1: float = 0.0
@@ -40,7 +40,7 @@ class SmaStrategy(CtaTemplate):
     def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
 
-        self.bg = BarGenerator(self.on_bar)
+        self.bg = BarGenerator(self.on_bar, 30, self.on_30minute_bar, Interval.MINUTE)
         self.am = ArrayManager()
 
 
@@ -62,6 +62,10 @@ class SmaStrategy(CtaTemplate):
 
 
     def on_bar(self, bar: BarData) -> None:
+        self.bg.update_bar(bar)
+
+    
+    def on_30minute_bar(self, bar: BarData):
         am = self.am
         am.update_bar(bar)
         if not am.inited:
@@ -79,17 +83,11 @@ class SmaStrategy(CtaTemplate):
         cross_below = self.fast_ma0 < self.slow_ma0 and self.fast_ma1 > self.slow_ma1
 
         if cross_over:
-            if self.pos == 0:
-                self.buy(bar.close_price, 1)
-            elif self.pos < 0:
-                self.cover(bar.close_price, 1)
-                self.buy(bar.close_price, 1)
+            self.buy(bar.close_price, 1)
         elif cross_below:
-            if self.pos == 0:
-                self.short(bar.close_price, 1)
-            elif self.pos > 0:
+            if self.pos > 0:
                 self.sell(bar.close_price, 1)
-                self.short(bar.close_price, 1)
+
 
     def on_order(self, order: OrderData) -> None:
         pass
