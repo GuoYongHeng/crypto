@@ -1,3 +1,6 @@
+import os
+import json
+
 from datetime import datetime
 from time import sleep
 from zoneinfo import ZoneInfo
@@ -16,18 +19,30 @@ def output_log(event):
     print(log.time, log.msg)
 
 
+def get_api_key():
+    file_path = os.path.abspath(__file__)
+    dir_path = os.path.dirname(file_path)
+
+    with open(f'{dir_path}/key.key', 'r') as f:
+        key = json.load(f)
+    return key["key"].strip(), key["secret"].strip()
+
+
 if __name__ == "__main__":
+
+    api_key, secret = get_api_key()
+
     ee = EventEngine()
     ee.register(EVENT_LOG, output_log)
     ee.start()
 
     setting = {
-        "API Key": "",
-        "API Secret": "",
+        "API Key": api_key,
+        "API Secret": secret,
         "Server": "REAL",
         "Kline Stream": "True",
-        "Proxy Host": "127.0.0.1",
-        "Proxy Port": 7890
+        "Proxy Host": "",
+        "Proxy Port": 0
     }
 
     gateway = BinanceSpotGateway(ee, BinanceSpotGateway.default_name)
@@ -39,7 +54,7 @@ if __name__ == "__main__":
         symbol="BTCUSDT",
         exchange=Exchange.BINANCE,
         interval=Interval.MINUTE,
-        start=datetime(2022, 1, 1, tzinfo=ZoneInfo('Asia/Shanghai')),
+        start=datetime(2022, 7, 1, tzinfo=ZoneInfo('Asia/Shanghai')),
         end=datetime(2023, 1, 1, tzinfo=ZoneInfo('Asia/Shanghai'))
     )
     bars = gateway.query_history(req)
