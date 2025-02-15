@@ -1,4 +1,5 @@
 from datetime import time
+from zoneinfo import ZoneInfo
 
 from vnpy_ctastrategy import (
     CtaTemplate,
@@ -11,36 +12,40 @@ from vnpy_ctastrategy import (
     ArrayManager,
 )
 
+from vnpy.trader.constant import Interval
+
 class DualThrustStrategy(CtaTemplate):
     """"""
     author = "GYH"
+
+    n_day = 5
+
+    first_bar = True
 
     fixed_size = 1
     k1 = 0.4
     k2 = 0.6
 
-    bars = []
-
     day_open = 0
-    day_high = 0
-    day_low = 0
 
-    day_range = 0
-    long_entry = 0
-    short_entry = 0
+    range = 0
+    buy_line = 0
+    sell_line = 0
 
-    long_entered = False
-    short_entered = False
+    long_entered = False 
+    # 该变量用来保证一个交易日只买一次，
+    # 我也不知道为什么一个交易日只买一次，
+    # 因为vnpy官方实现代码中一个交易日只买一次
+    # 我也就这样做了
 
-    parameters = ["k1", "k2", "fixed_size"]
-    variables = ["day_range", "long_entry", "short_entry"]
+    parameters = ["n_day", "k1", "k2", "fixed_size"]
+    variables = ["range", "buy_line", "sell_line"]
 
     def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
 
-        self.bg = BarGenerator(self.on_bar)
-        self.am = ArrayManager()
-        self.bars = []
+        self.bg = BarGenerator(self.on_bar, 1, self.on_1day_bar,  Interval.DAILY, time(8, tzinfo=ZoneInfo('Asia/Shanghai')))
+        self.am = ArrayManager(self.n_day + 1)
 
 
     def on_init(self):
@@ -62,54 +67,44 @@ class DualThrustStrategy(CtaTemplate):
 
     def on_bar(self, bar: BarData):
         self.cancel_all()
-        
-        self.bars.append(bar)
-        if len(self.bars) <= 2:
+
+        self.bg.update_bar(bar)
+
+        if not self.am.inited:
             return
-        else:
-            self.bars.pop(0)
-        last_bar: BarData = self.bars[-2]
 
-        if last_bar.datetime.date() != bar.datetime.date():
-            if self.day_high:
-                self.day_range = self.day_high - self.day_low
-                self.long_entry = bar.open_price + self.k1 * self.day_range
-                self.short_entry = bar.open_price - self.k2 * self.day_range
+        if self.first_bar:
+            self.day_open = bar.open_price # 记录当日开盘价
 
-            self.day_open = bar.open_price
-            self.day_high = bar.high_price
-            self.day_low = bar.low_price
+            HH = max(self.am.high_array)  # n日最高价的最高价
+            LC = min(self.am.close_array) # n日收盘价的最低价
+            HC = max(self.am.close_array) # n日收盘价的最高价
+            LL = min(self.am.low_array)   # n日最低价的最低价
+            self.range = max(HH - LC, HC - LL) # 计算n日的波动幅度
 
+            self.buy_line = self.day_open + self.k1 * self.range
+            self.sell_line = self.day_open - self.k2 * self.range
+
+            self.first_bar = False
             self.long_entered = False
-            self.short_entered = False
-        else:
-            self.day_high = max(self.day_high, bar.high_price)
-            self.day_low = min(self.day_low, bar.low_price)
 
-        if not self.day_range:
-            return
+        
+        # 不管有没有持仓，只要突破上轨就买入
+        if bar.close_price > self.buy_line and not self.long_entered:
+            self.buy(bar.close_price, self.fixed_size)
 
-        if self.pos == 0:
-            if bar.close_price > self.day_open:
-                if not self.long_entered:
-                    self.buy(self.long_entry, self.fixed_size, stop = True)
-            else:
-                if not self.short_entered:
-                    self.short(self.short_entry, self.fixed_size, stop = True)
-        elif self.pos > 0:
-            self.long_entered = True
+        # 只要突破下轨，就全部卖出
+        if bar.close_price < self.sell_line:
+            if self.pos > 0:
+                self.sell(bar.close_price, self.pos)
 
-            self.sell(self.short_entry, self.fixed_size, stop = True)
 
-            if not self.short_entered:
-                self.short(self.short_entry, self.fixed_size, stop = True)
-        elif self.pos < 0:
-            self.short_entered = True
-
-            self.cover(self.long_entry, self.fixed_size, stop = True)
-
-            if not self.long_entered:
-                self.buy(self.long_entry, self.fixed_size, stop = True)
+    def on_1day_bar(self, bar: BarData):
+        """
+        生成日k线
+        """
+        self.am.update_bar(bar)
+        self.first_bar = True
 
 
     def on_order(self, order: OrderData):
@@ -117,7 +112,8 @@ class DualThrustStrategy(CtaTemplate):
 
 
     def on_trade(self, trade: TradeData):
-        pass
+        if self.pos > 0:
+            self.long_entered = True
 
 
     def on_stop_order(self, stop_order: StopOrder):
