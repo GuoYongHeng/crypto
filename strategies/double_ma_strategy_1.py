@@ -9,14 +9,15 @@ from vnpy_ctastrategy import (
     ArrayManager,
 )
 
+from vnpy.trader.constant import Interval
 
 class DoubleMaStrategy(CtaTemplate):
     """"""
 
     author = "GYH"
 
-    fast_window = 10
-    slow_window = 20
+    fast_window = 10 * 24
+    slow_window = 20 * 24
 
     fast_ma0 = 0.0
     fast_ma1 = 0.0
@@ -31,8 +32,8 @@ class DoubleMaStrategy(CtaTemplate):
         """"""
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
 
-        self.bg = BarGenerator(self.on_bar)
-        self.am = ArrayManager()
+        self.bg = BarGenerator(self.on_bar, 1, self.on_1hour_bar, Interval.HOUR)
+        self.am = ArrayManager(490)
 
     def on_init(self):
         """
@@ -63,6 +64,10 @@ class DoubleMaStrategy(CtaTemplate):
         """
         Callback of new bar data update.
         """
+        self.bg.update_bar(bar)
+
+    def on_1hour_bar(self, bar: BarData):
+
         self.cancel_all()
 
         am = self.am
