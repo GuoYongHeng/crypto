@@ -12,25 +12,17 @@ from vnpy_ctastrategy import (
     ArrayManager,
 )
 
-from vnpy.trader.constant import Interval
+from vnpy.trader.constant import Interval, Offset
 
 class DualThrustStrategy(CtaTemplate):
     """"""
     author = "GYH"
 
-    n_day = 5
-
-    first_bar = True
-
     fixed_size = 1
     k1 = 0.6
     k2 = 0.4
 
-    day_open = 0
-
-    range = 0
-    buy_line = 0
-    sell_line = 0
+    window_size = 5
 
     parameters = ["n_day", "k1", "k2", "fixed_size"]
     variables = ["range", "buy_line", "sell_line"]
@@ -38,14 +30,28 @@ class DualThrustStrategy(CtaTemplate):
     def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
 
-        self.bg = BarGenerator(self.on_bar, 1, self.on_1day_bar,  Interval.DAILY, time(8, tzinfo=ZoneInfo('Asia/Shanghai')))
-        self.am = ArrayManager(self.n_day + 1)
+        # 将天数转换为分钟数
+        self.window_size = self.window_size * 24 * 60
+
+        self.bg = BarGenerator(self.on_bar)
+        self.am = ArrayManager(self.window_size + 1)
+
+        self.highs = None
+        self.lows = None
+        self.opens = None
+        self.closes = None
+        self.volumes = None
+
+        # 每小时获取一次小时线的开盘价，在分钟线进行操作
+        self.open_price_this_period = None
+
+        # 今天是否开仓
+        self.today_open = False
 
 
     def on_init(self):
         self.write_log("策略初始化")
-        self.load_bar(10)
-
+        #self.load_bar(self.window_size + 1)
 
     def on_start(self):
         self.write_log("策略启动")
@@ -60,46 +66,48 @@ class DualThrustStrategy(CtaTemplate):
     
 
     def on_bar(self, bar: BarData):
+
         self.cancel_all()
 
-        self.bg.update_bar(bar)
+        self.am.update_bar(bar)
 
         if not self.am.inited:
             return
 
-        if self.first_bar:
-            self.day_open = bar.open_price # 记录当日开盘价
+        bar_time = bar.datetime.strftime("%H%M%S")
+        if bar_time == "080000":
+            #这是今天第一根bar，因为binance是从北京时间8点作为的日k线的开始
+            # 今天第一个k线刚进来，今天肯定没开仓
+            self.today_open = False
+            # 记录当天开盘价
+            self.open_price_this_period = bar.open_price
+    
+        if self.open_price_this_period is None:
+            return
 
-            HH = max(self.am.high_array)  # n日最高价的最高价
-            LC = min(self.am.close_array) # n日收盘价的最低价
-            HC = max(self.am.close_array) # n日收盘价的最高价
-            LL = min(self.am.low_array)   # n日最低价的最低价
-            self.range = max(HH - LC, HC - LL) # 计算n日的波动幅度
+        self.highs = self.am.high[-self.window_size:]
+        self.lows = self.am.low[-self.window_size:]
+        self.opens = self.am.open[-self.window_size:]
+        self.closes = self.am.close[-self.window_size:]
+        self.volumes = self.am.volume[-self.window_size:]
 
-            self.buy_line = self.day_open + self.k1 * self.range
-            self.sell_line = self.day_open - self.k2 * self.range
+        window_hh = max(self.highs)
+        window_lc = min(self.closes)
+        window_hc = max(self.closes)
+        window_ll = min(self.lows)
 
-            self.first_bar = False
+        window_range = max(window_hh - window_lc, window_hc - window_ll)
+        upper_bound = self.open_price_this_period + self.k1 * window_range
+        lower_bound = self.open_price_this_period - self.k2 * window_range
 
-        
-        # 不管有没有持仓，只要突破上轨就买入
-        if bar.close_price > self.buy_line:
-            self.buy(bar.close_price, self.fixed_size)
-            self.buy_line = bar.open_price + self.k1 * self.range
-            self.sell_line = bar.open_price - self.k2 * self.range
+        if bar.close_price > upper_bound:
+            if self.pos == 0 and not self.today_open:
+                self.buy(bar.close_price, self.fixed_size)
 
-        # 只要突破下轨，就全部卖出
-        if bar.close_price < self.sell_line:
+        elif bar.close_price < lower_bound:
             if self.pos > 0:
                 self.sell(bar.close_price, self.pos)
 
-
-    def on_1day_bar(self, bar: BarData):
-        """
-        生成日k线
-        """
-        self.am.update_bar(bar)
-        self.first_bar = True
 
 
     def on_order(self, order: OrderData):
@@ -107,7 +115,9 @@ class DualThrustStrategy(CtaTemplate):
 
 
     def on_trade(self, trade: TradeData):
-        pass
+        # 如果是开仓，则记录今天已经开仓
+        if trade.offset == Offset.OPEN:
+            self.today_open = True
 
 
     def on_stop_order(self, stop_order: StopOrder):
