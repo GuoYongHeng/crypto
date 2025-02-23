@@ -22,6 +22,8 @@ class DualThrustStrategy(CtaTemplate):
 
     first_bar = True
 
+    buy_flag = False
+
     fixed_size = 1
     k1 = 0.6
     k2 = 0.4
@@ -91,11 +93,13 @@ class DualThrustStrategy(CtaTemplate):
         
         # 不管有没有持仓，只要突破上轨就买入
         if bar.close_price > self.buy_line and not self.long_entered:
+            self.buy_flag = True
             self.buy(bar.close_price, self.fixed_size)
 
         # 只要突破下轨，就全部卖出
         if bar.close_price < self.sell_line:
             if self.pos > 0:
+                self.buy_flag = False
                 self.sell(bar.close_price, self.pos)
 
 
@@ -112,7 +116,8 @@ class DualThrustStrategy(CtaTemplate):
 
 
     def on_trade(self, trade: TradeData):
-        if self.pos > 0:
+        # 如果买成功了，就标记long_entered，保证一天只买一次
+        if self.buy_flag:
             self.long_entered = True
 
 
