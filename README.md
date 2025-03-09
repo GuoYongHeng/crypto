@@ -25,6 +25,6 @@ vnpy示例：https://github.com/vnpy/vnpy_ctastrategy/blob/main/vnpy_ctastrategy
 
 atr rsi策略
 
-讲解：
+讲解：https://zhuanlan.zhihu.com/p/42063721
 
 vnpy实例：https://github.com/vnpy/vnpy_ctastrategy/blob/main/vnpy_ctastrategy/strategies/atr_rsi_strategy.py
