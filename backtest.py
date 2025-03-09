@@ -9,7 +9,7 @@ if __name__ == "__main__":
     engine = BacktestingEngine()
 
     engine.set_parameters(
-        vt_symbol="BTC/USDT.BINANCE",
+        vt_symbol="BTCUSDT.BINANCE",
         interval=Interval.MINUTE,
         start=datetime(2024,1,2),
         end=datetime(2024,3,2),
