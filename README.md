@@ -6,8 +6,6 @@ vnpy crypto
 
 strategies目录是自己写的策略
 
-我是量化交易初学者，大家初学的可以一块交流下，我的微信：ahappygoblin
-
 双均线策略：
 
 讲解：https://www.myquant.cn/docs/python_strategyies/153
